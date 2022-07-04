@@ -1,0 +1,213 @@
+#
+#	git.sk 1.0.0
+#	Use Github within skript
+#	
+#	Created for Public use by MrEnxo
+#	Copyright © 2022 MrEnxo
+#
+#	Written by MrEnxo (https://mrenxo.me)
+#
+
+
+command /gitsk [<string>] [<string>]:
+	permission: gitsk.use
+	trigger:
+		if arg-1 is "reload":
+			execute sender command "/sk reload /gitsk/"
+		else if arg-1 is "repos" or "repo":
+			GITSKUI_repos(player)
+		else if arg-1 is "login" or "auth":
+			GITSKUI_loginManager(player)
+		else if arg-1 is "load" or "sync" or "clone" or "pull":
+			if arg-2 is not set:
+				loop {gitsk::repos::*}:
+					GITSK_clone({gitsk::repos::%loop-value%::url}, {gitsk::repos::%loop-value%::target}, {gitsk::repos::%loop-value%::branch}, loop-value, {gitsk::repos::%loop-value%::folder})
+			else:
+				if {gitsk::repos::%arg-2%} is set:
+					GITSK_clone({gitsk::repos::%arg-2%::url}, {gitsk::repos::%arg-2%::target}, {gitsk::repos::%arg-2%::branch}, arg-2, {gitsk::repos::%arg-2%::folder})
+				else:
+					GITSK_Message(player, "That Repo does not exist")
+		else if arg-1 is "help":
+			send "&7&m &m &m &m &m &m &m &m &m &m &m &m &m &m &m &m &m &m &m &m &m &m &m &m &m &m &m &m &m &m &m &m &m"
+			send "&f"
+			send "&E&LGIT.SK HELP"
+			send "&f"
+			send "&f"
+			send "&7 - &E/gitsk reload &f- &7Reload all of Git.sk's scripts"
+			send "&7 - &E/gitsk login &f- &7Open Github Login GUI"
+			send "&7 - &E/gitsk pull <repo> &f- &7Pulls a Specific Repo"
+			send "&7 - &E/gitsk pull &f- &7Pulls all Repos"
+			send "&7 - &E/gitsk repos &f- &7Manage all your Repos and Create new Ones"
+			send "&f"
+			send "&7&m &m &m &m &m &m &m &m &m &m &m &m &m &m &m &m &m &m &m &m &m &m &m &m &m &m &m &m &m &m &m &m &m"
+
+		else if arg-1 is not set:
+			execute sender command "/gitsk help"
+
+
+on tab complete of "/gitsk":
+	if player has permission "gitsk.use":
+		set tab completions for position 1 to "repos", "pull", "login", "reload","auth", "load", "sync", "clone", "help","repo"
+		if tab arg-1 is "pull" or "load" or "sync" or "clone":
+			set tab completions for position 2 to {gitsk::repos::*}
+
+
+
+#
+# GITSKUI
+#
+
+function GITSKUI_loginManager(p: player):
+	create a gui with hopper inventory named "Login":
+		if {gitsk::auth::username} is not set:
+			format gui slot 0 with gray concrete named "&a&lENTER USERNAME" with lore "&f", "&7You have no username set.", "&7Click to set a username." and "&f":
+				set {gitsk::chat_capture::%player%} to "username"
+				close player's inventory
+				GITSK_Message(player, "Type Your Github Username in chat")
+		else:
+			format gui slot 0 with green concrete named "&a&lENTER USERNAME" with lore "&f", "&7Your Username is:", "&f%{skit::auth::username}%", "&f", "&7Click to change your username." and "&f":
+				set {gitsk::chat_capture::%player%} to "username"
+				close player's inventory
+				GITSK_Message(player, "Type Your Github Username in chat")
+
+		if {gitsk::auth::password} is not set:
+			format gui slot 4 with gray concrete named "&a&lENTER PASSWORD" with lore "&f", "&7You have no password set.", "&7Click to set a password." and "&f":
+				set {gitsk::chat_capture::%player%} to "password"
+				close player's inventory
+				GITSK_Message(player, "Type Your Github Password in chat")
+		else:
+			set {_pass} to ""
+			set {_s::*} to {gitsk::auth::password} split at ""
+			loop {_s::*}:
+				set {_pass} to "%{_pass}%*"
+			format gui slot 4 with green concrete named "&a&lENTER PASSWORD" with lore "&f", "&7Your Password is:", "&f%{_pass}%", "&f", "&7Click to change your password." and "&f":
+				set {gitsk::chat_capture::%player%} to "password"
+				close player's inventory
+				GITSK_Message(player, "Type Your Github Password in chat")
+		format gui slot 2 with stone button named "&e&LLOGIN":
+			close player's inventory
+			if {gitsk::auth::password} is set:
+				if {gitsk::auth::username} is set:
+					GITSK_Message(player, "You are now logged into github")
+				else:
+					GITSK_Message(player, "Please Eneter a Username")
+					GITSKUI_loginManager(player)
+			else:
+				GITSK_Message(player, "Please Eneter a Password")
+				GITSKUI_loginManager(player)
+				
+	open last gui to {_p}
+
+
+
+
+
+
+function GITSKUI_repoManager(p: player,repo: string):
+	set {gitsk::temp::%{_p}%::repo} to {_repo}
+	create a gui with virtual chest inventory with 5 rows named "Repo Manager : %{_repo}%":
+		format gui slot 10 with name tag named "&E&LREPO URL" with lore "&f", "&e&LCURRENT URL", "&f%{gitsk::repos::%{_repo}%::url}%", "&f" and "&e➤ Click to Edit":
+			
+			set {gitsk::chat_capture::%player%} to "edit_url"
+			close player's inventory
+			GITSK_Message(player, "Enter in the Repositories URL %nl%&8Format: ( User/Test )")
+		format gui slot 12 with oak sapling named "&E&LBRANCH" with lore "&f", "&e&LCURRENT BRANCH", "&f%{gitsk::repos::%{_repo}%::branch}%", "&f" and "&e➤ Click to Edit":
+			set {gitsk::chat_capture::%player%} to "edit_branch"
+			close player's inventory
+			GITSK_Message(player, "Enter in the Repositories Main Branch")
+		format gui slot 14 with redstone target named "&E&LTARGET" with lore "&f", "&e&LCURRENT TARGET", "&f%{gitsk::repos::%{_repo}%::target}%", "&f" and "&e➤ Click to Edit":
+			set {gitsk::chat_capture::%player%} to "edit_target"
+			close player's inventory
+			GITSK_Message(player, "Enter in the Repositories Target Folder %nl%&8Format: ( plugins/Skript/scripts )")
+		format gui slot 16 with lectern named "&E&LFOLDER" with lore "&f", "&e&LCURRENT FOLDER", "&f%{gitsk::repos::%{_repo}%::folder}%", "&f" and "&e➤ Click to Edit":
+			set {gitsk::chat_capture::%player%} to "edit_folder"
+			close player's inventory
+			GITSK_Message(player, "Enter in the Repositories Main Folder")
+		format gui slot 33 with red concrete named "&c&LDELETE" with lore "&f", "&c➤ Click to Delete Current Repo":
+			delete {gitsk::repos::%{_repo}%::*}
+			delete {gitsk::repos::%{_repo}%}
+			GITSKUI_repos(player)
+		format gui slot 29 with barrier named "&c&LBACK" with lore "&f", "&c➤ Click to Go Back":
+			GITSKUI_repos(player)
+	open last gui to {_p}
+
+
+
+
+
+
+function GITSKUI_repos(p: player):
+	create a gui with virtual chest inventory with 5 rows named "Repo Manager":
+		loop {gitsk::repos::*}:
+			set {_lv} to loop-value
+			format next gui slot with tinted glass named "&7%loop-value%" with lore "&f", "&8&lREPO URL&8: &7%{gitsk::repos::%loop-value%::url}%", "&8&lBRANCH&8: &7%{gitsk::repos::%loop-value%::branch}%", "&8&lTARGET&8: &7%{gitsk::repos::%loop-value%::target}%", "&f", "&e➤ Left Click To Edit", "&b➤ Right Click To Pull":
+				if gui click type is left mouse button:
+					GITSKUI_repoManager(player, {_lv})
+				if gui click type is right mouse button:
+					execute sender command "/gitsk pull %{_lv}%"
+		format gui slot 27,28,29,30,31,32,33,34,35 with piston named "&f"
+		format gui slot 40 with emerald named "&a&lCREATE REPO" with lore "&f", "&7Create a repo that automatically", "&7downloads to your server.", "&f", "&a➤ Click to Start":
+			set {gitsk::chat_capture::%player%} to "repo_init"
+			GITSK_Message(player, "Enter in the Repositories Name")
+			close player's inventory
+	open last gui to {_p}
+
+
+
+on chat:
+	{gitsk::chat_capture::%player%} is set
+	cancel event
+	
+# AUTH
+
+	if {gitsk::chat_capture::%player%} is "username":
+		set {gitsk::auth::username} to message
+		send "&e&lGIT.SK &eYou Username has been set"
+		GITSKUI_loginManager(player)
+		delete {gitsk::chat_capture::%player%}
+	if {gitsk::chat_capture::%player%} is "password":
+		set {gitsk::auth::password} to message
+		send "&e&lGIT.SK &eYou Passwod has been set"
+		GITSKUI_loginManager(player)
+		delete {gitsk::chat_capture::%player%}
+		
+
+# REPO
+	
+	if {gitsk::chat_capture::%player%} is "repo_init":
+		set {gitsk::repos::%message%} to message
+		set {gitsk::temp::%player%::repo} to message
+		GITSK_Message(player, "Enter in the Repositories URL %nl%&8Format: ( User/Test )")
+		set {gitsk::chat_capture::%player%} to "repo_url"
+	else if {gitsk::chat_capture::%player%} is "repo_url":
+		set {gitsk::repos::%{gitsk::temp::%player%::repo}%::url} to message
+		GITSK_Message(player, "Enter in the Repositories Main Branch")
+		set {gitsk::chat_capture::%player%} to "repo_branch"
+	else if {gitsk::chat_capture::%player%} is "repo_branch":
+		set {gitsk::repos::%{gitsk::temp::%player%::repo}%::branch} to message
+		GITSK_Message(player, "Enter in the Repositories Target Folder %nl%&8Format: ( plugins/Skript/scripts )")
+		set {gitsk::chat_capture::%player%} to "repo_target"
+	else if {gitsk::chat_capture::%player%} is "repo_target":
+		set {gitsk::repos::%{gitsk::temp::%player%::repo}%::target} to message
+		GITSK_Message(player, "Repo Setup Finished")
+		GITSKUI_repos(player)
+
+
+
+	if {gitsk::chat_capture::%player%} is "edit_url":
+		set {gitsk::repos::%{gitsk::temp::%player%::repo}%::url} to message
+		GITSKUI_repoManager(player,{gitsk::temp::%player%::repo})
+		delete {gitsk::chat_capture::%player%}
+	if {gitsk::chat_capture::%player%} is "edit_branch":
+		set {gitsk::repos::%{gitsk::temp::%player%::repo}%::branch} to message
+		GITSKUI_repoManager(player,{gitsk::temp::%player%::repo})
+		delete {gitsk::chat_capture::%player%}
+	if {gitsk::chat_capture::%player%} is "edit_target":
+		set {gitsk::repos::%{gitsk::temp::%player%::repo}%::target} to message
+		GITSKUI_repoManager(player,{gitsk::temp::%player%::repo})
+		delete {gitsk::chat_capture::%player%}
+	if {gitsk::chat_capture::%player%} is "edit_folder":
+		set {gitsk::repos::%{gitsk::temp::%player%::repo}%::folder} to message
+		GITSKUI_repoManager(player,{gitsk::temp::%player%::repo})
+		delete {gitsk::chat_capture::%player%}
+

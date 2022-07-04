@@ -1,0 +1,136 @@
+import:
+	
+	java.io.File
+	java.util.List
+	java.util.Set
+	java.util.Arrays
+	org.eclipse.jgit.api.Git
+	org.eclipse.jgit.transport.UsernamePasswordCredentialsProvider as UserProvider
+
+
+
+
+function GITSK_Message(p: player, msg: string):
+	send "&7&m &m &m &m &m &m &m &m &m &m &m &m &m &m &m &m &m &m &m &m &m &m &m &m &m &m &m &m &m &m &m &m &m" to {_p}
+	send "&f" to {_p}
+	send "&e&lGIT.SK" to {_p}
+	send "&7 - &e%{_msg}%" to {_p}
+	send "&f" to {_p}
+	send "&7&m &m &m &m &m &m &m &m &m &m &m &m &m &m &m &m &m &m &m &m &m &m &m &m &m &m &m &m &m &m &m &m &m" to {_p}
+
+function GITSK_debug(msg: string):
+	set {_m} to ""
+	if {_msg} contains "&c" or "&4":
+		set {_m} to "&e&lGIT.SK &4&LERROR &c%uncolored {_msg}%"
+	else:
+		set {_m} to "&e&lGIT.SK &f%{_msg}%"
+	loop all players:
+		if loop-player has permission "gitsk.debug":
+			send {_m} to loop-player
+
+
+
+
+# Delete File Path
+function GITSK_deletePath(dir: string):
+	{_dir} is not "", " ", "/" or ":"
+	delete file path {_dir}
+
+# Transfer Path
+function GITSK_transferPath(path1: string, path2: string):
+
+	move file path {_path1} to file path {_path2}
+
+# Path Exists
+function GITSK_pathExists(path: string) :: boolean:
+	if file path {_path} is not missing:
+		return true
+	return false
+
+# Create File Path
+function GITSK_createPath(path: string):
+	GITSK_pathExists({_path}) is false
+	create file path {_path}
+
+# Get All Files
+function GITSK_getAllFiles(path: string) :: strings:
+	add GITSK_getFiles({_path}) to {_r::*}
+	loop GITSK_getDirectories({_path}):
+		add GITSK_getAllFiles(loop-value) to {_r::*}
+	return {_r::*}
+
+# Get Files
+function GITSK_getFiles(path: string) :: strings:
+	set {_files::*} to all files of dir path {_path}
+	loop {_files::*}:
+		add "%loop-value%" to {_r::*}
+	return {_r::*}
+
+# Get Directories
+function GITSK_getDirectories(path: string) :: strings:
+	set {_files::*} to all directories of dir path {_path}
+	loop {_files::*}:
+		add "%loop-value%" to {_r::*}
+	return {_r::*}
+
+# Boolean to String
+function GITSK_booleanToString(val: boolean) :: string:
+	if {_val} is true:
+		return "&atrue"
+	else:
+		return "&cfalse"
+
+function GITSK_clone(repo: string, target: string = "clone/", branch: string = "main", id: string = "null", folder: string):
+	
+	while {git::cloning} is true:
+		wait 5 ticks
+	set {git::cloning} to true
+
+	GITSK_debug("&8(&d%{_id}%&8) &fAttempting to clone repository &b%{_repo}% &f at &b%{_branch}%.")
+
+	# Set Variables
+	set {_dir} to "git/temp/%{_repo}%/"
+	set {_mainFolder} to "%{_dir}%%{_folder}%/"
+	if {_folder} is not set:
+		set {_mainFolder} to "%{_dir}%/"
+	set {_uri} to "https://github.com/%{_repo}%.git"
+	set {_start} to now
+
+	# Delete File Path
+	GITSK_deletePath("git/temp/%{_repo}%/")
+	wait 1 seconds
+
+	# Clone Repository
+	create new section with {_start}, {_uri}, {_dir} and {_branch} stored in {_clone}:
+		Git.cloneRepository().setURI({_uri}).setDirectory(new File({_dir})).setBranchesToClone(Arrays.asList("refs/heads/%{_branch}%")).setBranch("refs/heads/%{_branch}%").setCredentialsProvider(new UserProvider({gitsk::auth::username},  {gitsk::auth::password})).call()
+		GITSK_debug("&8(&d%{_id}%&8) &fFinished cloning in &b%difference between now and {_start}%")
+	run section {_clone} async with {_start}, {_uri}, {_dir} and {_branch} and wait
+
+	GITSK_debug("&8(&d%{_id}%&8) &eWaiting...")
+	wait 20 ticks
+
+	if GITSK_pathExists({_mainFolder}) is true:
+		GITSK_debug("&8(&d%{_id}%&8) &fTransfering Files to &b%{_target}%")
+		set {_files::*} to GITSK_getAllFiles({_mainFolder})
+		set {_amount} to amount of {_files::*}
+		GITSK_debug("&8(&d%{_id}%&8) &fAttempting to replace &b%{_amount}%&f files.")
+		loop {_files::*}:
+			add 1 to {_loops}
+			set {_s} to loop-value
+			replace all "%{_mainFolder}%" in {_s} with ""
+			if GITSK_pathExists(loop-value) is true:
+				if GITSK_pathExists("%{_target}%/%{_s}%") is true:
+					GITSK_deletePath("%{_target}%/%{_s}%")
+					wait 1 ticks
+				else:
+					GITSK_createPath("%{_target}%/%{_s}%")
+					wait 1 ticks
+					GITSK_deletePath("%{_target}%/%{_s}%")
+					wait 1 ticks
+				GITSK_transferPath(loop-value, "%{_target}%/%{_s}%")
+				wait 1 ticks
+				if GITSK_pathExists("%{_target}%/%{_s}%") is false:
+					GITSK_debug("&8(&d%{_id}%&8) - &cFailed!")
+
+	GITSK_debug("&8(&d%{_id}%&8) &fFinished updating in &b%difference between now and {_start}%")
+	delete {git::cloning}
